@@ -1,0 +1,33 @@
+Multitouch MIDI keyboard in a Harmonic Table-like layout using Python and Kivy
+
+This should work on any platform supported by Kivy/PyGame.
+I use it on an 11.6" Windows 8 touchscreen laptop/tablet hybrid running Linux.
+
+F11 will make it fullscreen, Escape quits, and pressing the tilde key (`)
+will let you select an output device or program. I use Linux MultiMedia
+Studio with the SoundFont player and sometimes ZynAddSubFX,
+but any synthesizer that speaks MIDI should work just as well.
+
+There are a few extra options in the tidle menu you may find useful -
+for example, the number of rows and keys per row can be increased for larger
+touchscreens. There are also some less useful options, but I'll leave it to
+you to find or ignore them.
+
+MasterGrid was inspired by several different Rob Fielding apps,
+including CSharpAttempt (similar to his Mugician/Cantor iOS apps)
+as well as by somewhat similar Android apps, such as IsoKeys/Hexiano.
+This is not a continuous/legato instrument, but I may eventually attempt
+to implement MIDI pitch bend for it.
+
+Parts of MasterGrid - namely, most MIDI-related functions - are heavily based
+on code from IcarusTouch (http://github.com/stocyr/IcarusTouch),
+which is also licensed under the GPLv3, copyright (c) 2011 Cyril Stoller.
+
+Please share, hack away and release any modifications you might make
+if you find this useful.
+
+MasterGrid is released under the terms of the GNU General Public License,
+version 3 or later. See LICENSE for the full text of the license.
+
+Copyright (c) 2014 Robert Oscilowski
+Portions Copyright (c) 2011 Cyril Stoller.
