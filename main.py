@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 '''
 MasterGrid
-Copyright (c) 2014 Robert Oscilowski
+Copyright (c) 2015 Robert Oscilowski
 
 Multitouch MIDI keyboard using Kivy.
-This should work on any platform supported by Kivy/PyGame.
 
 MasterGrid is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -115,16 +114,13 @@ class MasterGrid(BoxLayout):
         self._keyboard = None
 
     def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
-        if keycode[1] == 'f11':
+        if keycode[1] == 'spacebar':
             Window.toggle_fullscreen()
-        elif keycode[1] == '`':
-            self.open_settings()
+        elif keycode[1] == 'tab':
+            self.app.open_settings()
         elif keycode[1] == 'escape':
             quit()
         return True
-
-    def open_settings(self):
-        self.app.open_settings()
 
     def determine_note(self, touch):
         for row in self.children:
