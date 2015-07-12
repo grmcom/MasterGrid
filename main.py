@@ -135,12 +135,12 @@ class MasterGrid(BoxLayout):
         for row in self.children:
             for key in row.children:
                 if key.collide_point(*touch):
-                    return key.center_x
+                    return key.center_y
 
     def on_touch_down(self, touch):
         velocity = self.app.config.getint('MIDI', 'Velocity')
         if self.app.config.getboolean('MIDI', 'Aftertouch'):
-            velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.x)))
+            velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.y)))
         elif 'pressure' in touch.profile and not self.app.config.getboolean('MIDI', 'Aftertouch'):
             velocity = min(touch.pressure, velocity)
         self.midi_out.note_on(self.determine_note(touch.pos), velocity, self.app.config.getint('MIDI', 'Channel'))
@@ -156,12 +156,12 @@ class MasterGrid(BoxLayout):
         if not self.is_note_same(touch.pos, touch.ppos):
             self.midi_out.note_off(self.determine_note(touch.ppos), 0, self.app.config.getint('MIDI', 'Channel'))
             if self.app.config.getboolean('MIDI', 'Aftertouch'):
-                velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.x)))
+                velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.y)))
             elif 'pressure' in touch.profile and not self.app.config.getboolean('MIDI', 'Aftertouch'):
                 velocity = min(touch.pressure, velocity)
             self.midi_out.note_on(self.determine_note(touch.pos), velocity, self.app.config.getint('MIDI', 'Channel'))
         elif self.app.config.getboolean('MIDI', 'Aftertouch'):
-            velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.x)))
+            velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.y)))
             self.midi_out.write_short(0xA0 + self.app.config.getint('MIDI', 'Channel'), self.determine_note(touch.pos), velocity)
 
     def resize_grid(self):
@@ -251,7 +251,7 @@ class MasterGridApp(App):
             { "type": "midi", "title": "MIDI output device", "desc": "Device to use for MIDI", "section": "MIDI", "key": "Device"},
             { "type": "numeric", "title": "MIDI channel", "desc": "MIDI channel to send data to [0 - 15]", "section": "MIDI", "key": "Channel"},
             { "type": "numeric", "title": "Velocity", "desc": "Default velocity of the midi notes", "section": "MIDI", "key": "Velocity"},
-            { "type": "bool", "title": "Aftertouch", "desc": "Make notes decrease in volume as touch moves away from the key's horizontal center", "section": "MIDI", "key": "Aftertouch"},
+            { "type": "bool", "title": "Aftertouch", "desc": "Make notes decrease in volume as touch moves away from the key's vertical center", "section": "MIDI", "key": "Aftertouch"},
             { "type": "numeric", "title": "Aftertouch Sensitivity", "desc": "Velocity change multiplier [1 - 4]", "section": "MIDI", "key": "Sensitivity"},
             { "type": "numeric", "title": "Lowest Note", "desc": "MIDI note number of the first note (bottom left key)", "section": "MIDI", "key": "LowNote"},
             { "type": "numeric", "title": "Rows", "desc": "Number of rows of keys", "section": "MIDI", "key": "Rows"},
