@@ -120,7 +120,6 @@ class MasterGrid(BoxLayout):
             self.app.open_settings()
         elif keycode[1] == 'escape':
             quit()
-        return True
 
     def determine_note(self, touch):
         for row in self.children:
