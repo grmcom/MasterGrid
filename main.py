@@ -120,15 +120,20 @@ class MasterGrid(BoxLayout):
             self.app.open_settings()
         elif keycode[1] == 'escape':
             quit()
+        else:
+            pass
 
-    def determine_note(self, touch):
+    def which_note(self, touch):
         for row in self.children:
             for key in row.children:
                 if key.collide_point(*touch):
                     return key.index
 
-    def is_note_same(self, touch1, touch2):
-        return self.determine_note(touch1) == self.determine_note(touch2)
+    def same_note(self, touch1, touch2):
+        return self.which_note(touch1) == self.which_note(touch2)
+
+    def new_note(self, touch):
+        return True if not self.same_note(touch.pos, touch.ppos) else False
 
     def note_center(self, touch):
         for row in self.children:
@@ -136,32 +141,39 @@ class MasterGrid(BoxLayout):
                 if key.collide_point(*touch):
                     return key.center_y
 
-    def on_touch_down(self, touch):
+    def vel(self, touch):
         velocity = self.app.config.getint('MIDI', 'Velocity')
-        if self.app.config.getboolean('MIDI', 'Aftertouch'):
-            velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.y)))
-        elif 'pressure' in touch.profile and not self.app.config.getboolean('MIDI', 'Aftertouch'):
+        if 'size_h' in touch.profile:
+            velocity = min(touch.size_h, velocity)
+        elif 'size_w' in touch.profile:
+            velocity = min(touch.size_w, velocity)
+        elif 'pressure' in touch.profile:
             velocity = min(touch.pressure, velocity)
-        self.midi_out.note_on(self.determine_note(touch.pos), velocity, self.app.config.getint('MIDI', 'Channel'))
+        elif self.app.config.getboolean('MIDI', 'Aftertouch'):
+            velocity -= int(abs(self.note_center(touch.pos) - touch.y)) * self.app.config.getint('MIDI', 'Sensitivity')
+        return velocity
+
+    def note_on(self, note, velocity, channel):
+        return self.midi_out.note_on(note, velocity, channel)
+
+    def note_off(self, note, channel):
+        return self.midi_out.note_off(note, 0, channel)
+
+    def on_touch_down(self, touch):
+        channel = self.app.config.getint('MIDI', 'Channel')
+        self.note_on(self.which_note(touch.pos), self.vel(touch), channel)
 
     def on_touch_up(self, touch):
-        if self.is_note_same(touch.pos, touch.ppos):
-            self.midi_out.note_off(self.determine_note(touch.pos), 0, self.app.config.getint('MIDI', 'Channel'))
-        else:
-            self.midi_out.note_off(self.determine_note(touch.ppos), 0, self.app.config.getint('MIDI', 'Channel'))
+        channel = self.app.config.getint('MIDI', 'Channel')
+        self.note_off(self.which_note(touch.pos), channel)
 
     def on_touch_move(self, touch):
-        velocity = self.app.config.getint('MIDI', 'Velocity')
-        if not self.is_note_same(touch.pos, touch.ppos):
-            self.midi_out.note_off(self.determine_note(touch.ppos), 0, self.app.config.getint('MIDI', 'Channel'))
-            if self.app.config.getboolean('MIDI', 'Aftertouch'):
-                velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.y)))
-            elif 'pressure' in touch.profile and not self.app.config.getboolean('MIDI', 'Aftertouch'):
-                velocity = min(touch.pressure, velocity)
-            self.midi_out.note_on(self.determine_note(touch.pos), velocity, self.app.config.getint('MIDI', 'Channel'))
-        elif self.app.config.getboolean('MIDI', 'Aftertouch'):
-            velocity -= max(0, int(self.app.config.getint('MIDI', 'Sensitivity') * abs(self.note_center(touch.pos) - touch.y)))
-            self.midi_out.write_short(0xA0 + self.app.config.getint('MIDI', 'Channel'), self.determine_note(touch.pos), velocity)
+        channel = self.app.config.getint('MIDI', 'Channel')
+        if self.new_note(touch):
+            self.note_off(self.which_note(touch.ppos), channel)
+            self.note_on(self.which_note(touch.pos), self.vel(touch), channel)
+        if self.app.config.getboolean('MIDI', 'Aftertouch'):
+            self.midi_out.write_short(0xA0 + channel, self.which_note(touch.pos), self.vel(touch))
 
     def resize_grid(self):
         self.clear_widgets()
