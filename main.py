@@ -120,8 +120,6 @@ class MasterGrid(BoxLayout):
             self.app.open_settings()
         elif keycode[1] == 'escape':
             quit()
-        else:
-            pass
 
     def which_note(self, touch):
         for row in self.children:
@@ -150,7 +148,7 @@ class MasterGrid(BoxLayout):
         elif 'pressure' in touch.profile:
             velocity = min(touch.pressure, velocity)
         elif self.app.config.getboolean('MIDI', 'Aftertouch'):
-            velocity -= int(abs(self.note_center(touch.pos) - touch.y)) * self.app.config.getint('MIDI', 'Sensitivity')
+            velocity -= round(abs(self.note_center(touch.pos) - touch.y)) * self.app.config.getint('MIDI', 'Sensitivity')
         return velocity
 
     def note_on(self, note, velocity, channel):
