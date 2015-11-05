@@ -140,15 +140,16 @@ class MasterGrid(BoxLayout):
                     return key.center_y
 
     def vel(self, touch):
-        velocity = self.app.config.getint('MIDI', 'Velocity')
+        maxvelocity = self.app.config.getint('MIDI', 'Velocity')
+        sensitivity = self.app.config.getint('MIDI', 'Sensitivity')
         if 'size_h' in touch.profile:
-            velocity = min(touch.size_h, velocity)
+            velocity = min(round(touch.size_h * sensitivity), maxvelocity)
         elif 'size_w' in touch.profile:
-            velocity = min(touch.size_w, velocity)
+            velocity = min(round(touch.size_w * sensitivity), maxvelocity)
         elif 'pressure' in touch.profile:
-            velocity = min(touch.pressure, velocity)
+            velocity = min(round(touch.pressure * sensitivity), maxvelocity)
         elif self.app.config.getboolean('MIDI', 'Aftertouch'):
-            velocity -= round(abs(self.note_center(touch.pos) - touch.y)) * self.app.config.getint('MIDI', 'Sensitivity')
+            velocity = maxvelocity - round(abs(self.note_center(touch.pos) - touch.y)) * sensitivity
         return velocity
 
     def note_on(self, note, velocity, channel):
