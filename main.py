@@ -23,6 +23,7 @@ import kivy
 from kivy.app import App
 from kivy.core.window import Window
 from kivy.uix.widget import Widget
+from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.button import Button
@@ -36,36 +37,29 @@ class Key(Button):
 
 class Grid(GridLayout):
     app = ObjectProperty(None)
+    midi = ObjectProperty(None)
 
     def __init__(self, **kwargs):
         super(Grid, self).__init__(**kwargs)
-        pygame.midi.init()
-        self.set_midi_device()
         self.channel = self.app.config.getint('MIDI', 'Channel')
         self.velocity = self.app.config.getint('MIDI', 'Velocity')
         self.sensitivity = self.app.config.getint('MIDI', 'Sensitivity')
         self.aftertouch = self.app.config.getboolean('MIDI', 'Aftertouch')
+        self._keyboard = Window.request_keyboard(self._keyboard_closed, self)
+        self._keyboard.bind(on_key_down=self._on_keyboard_down)
 
-    def set_midi_device(self):
-        c = pygame.midi.get_count()
-        id_device_from_settings = -1
-        print('%s midi devices found' % c)
-        for i in range(c):
-            if pygame.midi.get_device_info(i)[1].decode() == self.app.config.get('MIDI', 'Device'):
-                id_device_from_settings = i
-        print('Default is %s' % pygame.midi.get_device_info(pygame.midi.get_default_output_id())[1].decode())
+    def _keyboard_closed(self):
+        self._keyboard.unbind(on_key_down=self._on_keyboard_down)
+        self._keyboard = None
 
-        if id_device_from_settings != -1:
-            self.midi_device = id_device_from_settings
-            print('MIDI device "%s" found. Connecting.' % pygame.midi.get_device_info(id_device_from_settings)[1].decode())
-        else:
-            self.midi_device = pygame.midi.get_default_output_id()
-            print('Warning: No MIDI device named "%s" found. Choosing the system default ("%s").' % (self.app.config.get('MIDI', 'Device'), pygame.midi.get_device_info(self.midi_device)[1].decode()))
-
-        if pygame.midi.get_device_info(self.midi_device)[4] == 1:
-            print('Error: Unable to open MIDI device - Already in use!')
-
-        self.midi_out = pygame.midi.Output(self.midi_device)
+    def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
+        if keycode[1] == 'spacebar':
+            Window.toggle_fullscreen()
+        elif keycode[1] == 'tab':
+            self.app.open_settings()
+        elif keycode[1] == 'escape':
+            quit()
+        return True
 
     def which_note(self, touch):
         for key in self.children:
@@ -97,10 +91,10 @@ class Grid(GridLayout):
             return self.velocity
 
     def note_on(self, note, velocity, channel):
-        return self.midi_out.note_on(note, velocity, self.channel)
+        return self.midi.note_on(note, velocity, self.channel)
 
     def note_off(self, note, channel):
-        return self.midi_out.note_off(note, 0, self.channel)
+        return self.midi.note_off(note, 0, self.channel)
 
     def on_touch_down(self, touch):
         if self.cur(touch):
@@ -116,7 +110,7 @@ class Grid(GridLayout):
                 self.note_off(self.prev(touch), self.channel)
                 self.note_on(self.cur(touch), self.pressure(touch), self.channel)
             if self.aftertouch:
-                self.midi_out.write_short(0xA0 + self.channel, self.cur(touch), self.pressure(touch))
+                self.midi.write_short(0xA0 + self.channel, self.cur(touch), self.pressure(touch))
 
 class SettingMIDI(SettingItem):
     '''Implementation of an option list in top of :class:`SettingItem`.
@@ -179,24 +173,30 @@ class SettingMIDI(SettingItem):
 class MasterGrid(App):
     title = 'MasterGrid'
 
-    def __init(self, **kwargs):
-        super(MasterGrid, self).__init__(**kwargs)
-        self._keyboard = Window.request_keyboard(self._keyboard_closed, self)
-        self._keyboard.bind(on_key_down=self._on_keyboard_down)
+    def set_midi_device(self):
+        c = pygame.midi.get_count()
+        id_device_from_settings = -1
+        print('%s midi devices found' % c)
+        for i in range(c):
+            if pygame.midi.get_device_info(i)[1].decode() == self.config.get('MIDI', 'Device'):
+                id_device_from_settings = i
+        print('Default is %s' % pygame.midi.get_device_info(pygame.midi.get_default_output_id())[1].decode())
 
-    def _keyboard_closed(self):
-        self._keyboard.unbind(on_key_down=self._on_keyboard_down)
-        self._keyboard = None
+        if id_device_from_settings != -1:
+            self.midi_device = id_device_from_settings
+            print('MIDI device "%s" found. Connecting.' % pygame.midi.get_device_info(id_device_from_settings)[1].decode())
+        else:
+            self.midi_device = pygame.midi.get_default_output_id()
+            print('Warning: No MIDI device named "%s" found. Choosing the system default ("%s").' % (self.config.get('MIDI', 'Device'), pygame.midi.get_device_info(self.midi_device)[1].decode()))
 
-    def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
-        if keycode[1] == 'spacebar':
-            Window.toggle_fullscreen()
-        elif keycode[1] == 'tab':
-            self.open_settings()
-        elif keycode[1] == 'escape':
-            quit()
+        if pygame.midi.get_device_info(self.midi_device)[4] == 1:
+            print('Error: Unable to open MIDI device - Already in use!')
+
+        self.midi = pygame.midi.Output(self.midi_device)
 
     def build(self):
+        pygame.midi.init()
+        self.set_midi_device()
         rows = self.config.getint('MIDI', 'Rows')
         keys = self.config.getint('MIDI', 'Keys')
         lownote = self.config.getint('MIDI', 'LowNote')
@@ -206,7 +206,7 @@ class MasterGrid(App):
         black = [0,0,0,1]
         white = [255,255,255,1]
 
-        grid = Grid(app=self, rows=rows, cols=keys)
+        grid = Grid(app=self, midi=self.midi, rows=rows, cols=keys)
 
         for row in reversed(range(rows)):
             for note in reversed(range(lownote, lownote + keys)):
