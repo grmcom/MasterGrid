@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 '''
 MasterGrid
 Copyright (c) 2015 Robert Oscilowski
@@ -23,7 +23,7 @@ import kivy
 from kivy.app import App
 from kivy.core.window import Window
 from kivy.uix.widget import Widget
-from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.button import Button
 from kivy.uix.settings import SettingItem
@@ -32,61 +32,19 @@ from kivy.properties import ObjectProperty, NumericProperty
 import pygame.midi
 
 class Key(Button):
-    '''Custom Button class for identifying individual keys'''
-    index = NumericProperty() # Key number
+    index = NumericProperty()
 
-class Row(BoxLayout):
-    '''Custom BoxLayout class for each row of keys'''
-    index = NumericProperty() # Row number
-    keys = NumericProperty() # Number of keys per octave 
-    lownote = NumericProperty() # Lowest note
-    interval = NumericProperty() # Semitone shift per octave
-
-    def __init__(self, **kwargs):
-        super(Row, self).__init__(**kwargs)
-        keys = self.keys
-        lownote = self.lownote
-        interval = self.interval
-
-        # Label all the keys
-        notenames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        black = [0,0,0,1]
-        white = [255,255,255,1]
-
-        # Fill rows with keys
-        for note in range(lownote, lownote + keys):
-            accidental = True if note % 12 in [1, 3, 6, 8, 10] else False
-            keycolor = black if accidental else white
-            textcolor = white if accidental else black
-            label = notenames[note % 12]
-            key = Key(index=note, text=label, background_color=keycolor, color=textcolor)
-            self.add_widget(key)
-
-class MasterGrid(BoxLayout):
-    '''Custom BoxLayout class for the grid of keys'''
+class Grid(GridLayout):
     app = ObjectProperty(None)
 
     def __init__(self, **kwargs):
-        super(MasterGrid, self).__init__(**kwargs)
-        # Start filling the grid
-        self.build_keyboard()
-        # Bind keys for fullscreen and settings panel
-        self._keyboard = Window.request_keyboard(self._keyboard_closed, self)
-        self._keyboard.bind(on_key_down=self._on_keyboard_down)
-        # Init PyGame MIDI
+        super(Grid, self).__init__(**kwargs)
         pygame.midi.init()
         self.set_midi_device()
-
-    def build_keyboard(self):
-        keys = self.app.config.getint('MIDI', 'Keys')
-        lownote = self.app.config.getint('MIDI', 'LowNote')
-        interval = self.app.config.getint('MIDI', 'Interval')
-
-        # Fill grid with rows of keys
-        for rownum in range(self.app.config.getint('MIDI', 'Rows')):
-            row = Row(index=rownum, keys=keys, lownote=lownote, interval=interval, orientation='horizontal')
-            self.add_widget(row, len(row.children))
-            lownote += interval
+        self.channel = self.app.config.getint('MIDI', 'Channel')
+        self.velocity = self.app.config.getint('MIDI', 'Velocity')
+        self.sensitivity = self.app.config.getint('MIDI', 'Sensitivity')
+        self.aftertouch = self.app.config.getboolean('MIDI', 'Aftertouch')
 
     def set_midi_device(self):
         c = pygame.midi.get_count()
@@ -109,23 +67,11 @@ class MasterGrid(BoxLayout):
 
         self.midi_out = pygame.midi.Output(self.midi_device)
 
-    def _keyboard_closed(self):
-        self._keyboard.unbind(on_key_down=self._on_keyboard_down)
-        self._keyboard = None
-
-    def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
-        if keycode[1] == 'spacebar':
-            Window.toggle_fullscreen()
-        elif keycode[1] == 'tab':
-            self.app.open_settings()
-        elif keycode[1] == 'escape':
-            quit()
-
     def which_note(self, touch):
-        for row in self.children:
-            for key in row.children:
-                if key.collide_point(*touch):
-                    return key.index
+        for key in self.children:
+            if key.collide_point(*touch):
+                return key.index
+        return None
 
     def same_note(self, touch1, touch2):
         return self.which_note(touch1) == self.which_note(touch2)
@@ -134,49 +80,43 @@ class MasterGrid(BoxLayout):
         return True if not self.same_note(touch.pos, touch.ppos) else False
 
     def note_center(self, touch):
-        for row in self.children:
-            for key in row.children:
-                if key.collide_point(*touch):
-                    return key.center_y
+        for key in self.children:
+            if key.collide_point(*touch):
+                return key.center_y
 
-    def vel(self, touch):
-        maxvelocity = self.app.config.getint('MIDI', 'Velocity')
-        sensitivity = self.app.config.getint('MIDI', 'Sensitivity')
-        if 'size_h' in touch.profile:
-            velocity = min(round(touch.size_h * sensitivity), maxvelocity)
-        elif 'size_w' in touch.profile:
-            velocity = min(round(touch.size_w * sensitivity), maxvelocity)
-        elif 'pressure' in touch.profile:
-            velocity = min(round(touch.pressure * sensitivity), maxvelocity)
-        elif self.app.config.getboolean('MIDI', 'Aftertouch'):
-            velocity = maxvelocity - round(abs(self.note_center(touch.pos) - touch.y)) * sensitivity
-        return velocity
+    def cur(self, touch):
+        return self.which_note(touch.pos)
+
+    def prev(self, touch):
+        return self.which_note(touch.ppos)
+
+    def pressure(self, touch):
+        if self.aftertouch:
+            return self.velocity - round(abs(self.note_center(touch.pos) - touch.y)) * self.sensitivity
+        else:
+            return self.velocity
 
     def note_on(self, note, velocity, channel):
-        return self.midi_out.note_on(note, velocity, channel)
+        return self.midi_out.note_on(note, velocity, self.channel)
 
     def note_off(self, note, channel):
-        return self.midi_out.note_off(note, 0, channel)
+        return self.midi_out.note_off(note, 0, self.channel)
 
     def on_touch_down(self, touch):
-        channel = self.app.config.getint('MIDI', 'Channel')
-        self.note_on(self.which_note(touch.pos), self.vel(touch), channel)
+        if self.cur(touch):
+            self.note_on(self.cur(touch), self.pressure(touch), self.channel)
 
     def on_touch_up(self, touch):
-        channel = self.app.config.getint('MIDI', 'Channel')
-        self.note_off(self.which_note(touch.pos), channel)
+        if self.cur(touch):
+            self.note_off(self.cur(touch), self.channel)
 
     def on_touch_move(self, touch):
-        channel = self.app.config.getint('MIDI', 'Channel')
-        if self.new_note(touch):
-            self.note_off(self.which_note(touch.ppos), channel)
-            self.note_on(self.which_note(touch.pos), self.vel(touch), channel)
-        if self.app.config.getboolean('MIDI', 'Aftertouch'):
-            self.midi_out.write_short(0xA0 + channel, self.which_note(touch.pos), self.vel(touch))
-
-    def resize_grid(self):
-        self.clear_widgets()
-        self.build_keyboard()
+        if self.cur(touch) and self.prev(touch):
+            if self.new_note(touch):
+                self.note_off(self.prev(touch), self.channel)
+                self.note_on(self.cur(touch), self.pressure(touch), self.channel)
+            if self.aftertouch:
+                self.midi_out.write_short(0xA0 + self.channel, self.cur(touch), self.pressure(touch))
 
 class SettingMIDI(SettingItem):
     '''Implementation of an option list in top of :class:`SettingItem`.
@@ -236,19 +176,60 @@ class SettingMIDI(SettingItem):
         # and open the popup !
         popup.open()
 
-class MasterGridApp(App):
+class MasterGrid(App):
     title = 'MasterGrid'
 
+    def __init(self, **kwargs):
+        super(MasterGrid, self).__init__(**kwargs)
+        self._keyboard = Window.request_keyboard(self._keyboard_closed, self)
+        self._keyboard.bind(on_key_down=self._on_keyboard_down)
+
+    def _keyboard_closed(self):
+        self._keyboard.unbind(on_key_down=self._on_keyboard_down)
+        self._keyboard = None
+
+    def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
+        if keycode[1] == 'spacebar':
+            Window.toggle_fullscreen()
+        elif keycode[1] == 'tab':
+            self.open_settings()
+        elif keycode[1] == 'escape':
+            quit()
+
     def build(self):
-        self.mastergridapp = MasterGrid(app=self, orientation='vertical')
-        return self.mastergridapp
+        rows = self.config.getint('MIDI', 'Rows')
+        keys = self.config.getint('MIDI', 'Keys')
+        lownote = self.config.getint('MIDI', 'LowNote')
+        interval = self.config.getint('MIDI', 'Interval')
+
+        notenames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        black = [0,0,0,1]
+        white = [255,255,255,1]
+
+        grid = Grid(app=self, rows=rows, cols=keys)
+
+        for row in reversed(range(rows)):
+            for note in reversed(range(lownote, lownote + keys)):
+                accidental = True if note % 12 in [1, 3, 6, 8, 10] else False
+                keycolor = black if accidental else white
+                textcolor = white if accidental else black
+                label = notenames[note % 12]
+                key = Key(index=note, text=label, background_color=keycolor, color=textcolor)
+                grid.add_widget(key, len(grid.children))
+            lownote += interval
+
+        return grid
+
+    def resize_grid(self):
+        self.clear_widgets()
+        self.build()
 
     def build_config(self, config):
         config.adddefaultsection('MIDI')
-        config.setdefault('MIDI', 'Device', 'LMMS')
+        config.setdefault('MIDI', 'Device', 'ZynAddSubFX')
         config.setdefault('MIDI', 'Channel', '0')
         config.setdefault('MIDI', 'Velocity', '127')
-        config.setdefault('MIDI', 'Aftertouch', False)
+        config.setdefault('MIDI', 'Aftertouch', True)
         config.setdefault('MIDI', 'Sensitivity', '3')
         config.setdefault('MIDI', 'Rows', '13')
         config.setdefault('MIDI', 'Keys', '25')
@@ -272,7 +253,7 @@ class MasterGridApp(App):
     def on_config_change(self, config, section, key, value):
         token = (section, key)
         if token == ('MIDI', 'Device'):
-            self.mastergridapp.set_midi_device()
+            self.set_midi_device()
         elif token == ('MIDI', 'Channel'):
             pass
         elif token == ('MIDI', 'Velocity'):
@@ -282,13 +263,13 @@ class MasterGridApp(App):
         elif token == ('MIDI', 'Sensitivity'):
             pass
         elif token == ('MIDI', 'LowNote'):
-            self.mastergridapp.resize_grid()
+            self.resize_grid()
         elif token == ('MIDI', 'Rows'):
-            self.mastergridapp.resize_grid()
+            self.resize_grid()
         elif token == ('MIDI', 'Keys'):
-            self.mastergridapp.resize_grid()
+            self.resize_grid()
         elif token == ('MIDI', 'Interval'):
-            self.mastergridapp.resize_grid()
+            self.resize_grid()
 
 if __name__ in ('__main__', '__android__'):
-    MasterGridApp().run()
+    MasterGrid().run()
